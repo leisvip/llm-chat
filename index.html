@@ -497,21 +497,41 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Noto
   async fetch(request) {
     const url = new URL(request.url);
     const target = url.searchParams.get('url');
-    if (!target) return new Response('Missing ?url= param', { status: 400 });
+    if (!target) {
+      return new Response('CORS Proxy Ready. Use ?url=https://api.example.com/v1/chat/completions', {
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': '*',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
-    if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-    const resp = await fetch(target, {
-      method: request.method,
-      headers: request.headers,
-      body: request.method !== 'GET' ? request.body : undefined,
-    });
-    const newResp = new Response(resp.body, resp);
-    Object.entries(corsHeaders).forEach(([k, v]) => newResp.headers.set(k, v));
-    return newResp;
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+    try {
+      const resp = await fetch(target, {
+        method: request.method,
+        headers: {
+          'Content-Type': request.headers.get('Content-Type') || 'application/json',
+          'Authorization': request.headers.get('Authorization') || '',
+        },
+        body: request.method !== 'GET' && request.method !== 'HEAD' ? await request.text() : undefined,
+      });
+      const newResp = new Response(resp.body, {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: resp.headers,
+      });
+      Object.entries(corsHeaders).forEach(([k, v]) => newResp.headers.set(k, v));
+      return newResp;
+    } catch (e) {
+      return new Response('Proxy Error: ' + e.message, {
+        status: 502,
+        headers: corsHeaders,
+      });
+    }
   }
 };</pre>
       </div>
@@ -591,8 +611,13 @@ function saveConfig(k,v){localStorage.setItem('llm_'+k,v)}
 function proxyFetch(url,opts,corsProxy){
   if(corsProxy){
     const proxy=corsProxy.replace(/\/$/,'');
-    if(proxy.includes('?')){return fetch(proxy+'&'+encodeURIComponent(url),opts)}
-    else{return fetch(proxy+'/'+url,opts)}
+    // 参数式代理（Cloudflare Worker）：proxy?url=encodedUrl
+    // 前缀式代理：proxy/https://api.example.com/...
+    if(proxy.includes('?')||proxy.includes('workers.dev')){
+      return fetch(proxy+'?url='+encodeURIComponent(url),opts);
+    }else{
+      return fetch(proxy+'/'+url,opts);
+    }
   }
   return fetch(url,opts);
 }
