@@ -298,8 +298,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Noto
     <div class="chat-container" id="chatContainer">
       <div class="welcome" id="welcomeScreen">
         <h2>LLM Chat</h2>
-        <p>支持本地 CLI 工具 + OpenAI 兼容 API</p>
+        <p>支持 OpenAI 兼容 API 的轻量聊天应用</p>
         <div class="env-info" id="envInfo"></div>
+        <div id="quickSetup" style="display:none;margin-top:1.5rem;padding:20px;border-radius:12px;border:1px solid var(--border);background:var(--card);max-width:500px;margin-left:auto;margin-right:auto;text-align:left">
+          <div style="font-weight:700;font-size:.95rem;margin-bottom:10px">⚡ 快速开始</div>
+          <ol style="font-size:.85rem;color:var(--text2);padding-left:1.2em;line-height:2">
+            <li>点击右上角 <b>⚙️ 设定</b></li>
+            <li>填写 <b>API Base URL</b>（如 <code style="font-size:.8rem">https://api.siliconflow.cn/v1</code>）</li>
+            <li>填写 <b>API Key</b></li>
+            <li>填写 <b>模型列表</b>（如 <code style="font-size:.8rem">Qwen/Qwen2.5-7B-Instruct</code>）</li>
+            <li>点击 <b>保存</b> 即可开始对话</li>
+          </ol>
+          <div style="font-size:.78rem;color:var(--text3);margin-top:8px">💡 API Key 仅存储在浏览器本地，不会上传到任何服务器</div>
+        </div>
         <div class="welcome-suggestions">
           <button class="suggestion-card" onclick="useSuggestion('请用简单的语言解释量子计算')"><div class="sug-title">💡 解释概念</div><div class="sug-desc">用简单的语言解释一个复杂概念</div></button>
           <button class="suggestion-card" onclick="useSuggestion('请帮我写一个快速排序算法，用 Python 实现')"><div class="sug-title">💻 写代码</div><div class="sug-desc">帮我写一段功能代码</div></button>
@@ -378,8 +389,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Noto
         <div class="form-group"><label>本地工具</label><div class="tool-cards" id="cliToolCards"></div></div>
       </div>
       <div id="apiConfigSection">
-        <div class="form-group"><label>API Base URL</label><div class="hint">OpenAI 兼容端点</div><input type="text" id="cfgBaseUrl" placeholder="https://api.openai.com/v1"></div>
-        <div class="form-group"><label>API Key</label><div class="hint">数据仅存储在本地浏览器</div><input type="password" id="cfgApiKey" placeholder="sk-..."></div>
+        <div class="form-group"><label>API Base URL</label><div class="hint">OpenAI 兼容端点，如 https://api.openai.com/v1 或 https://api.siliconflow.cn/v1</div><input type="text" id="cfgBaseUrl" placeholder="https://api.openai.com/v1"></div>
+        <div class="form-group"><label>API Key</label><div class="hint">数据仅存储在本地浏览器，不会上传到任何服务器</div><input type="password" id="cfgApiKey" placeholder="sk-..."></div>
+        <div class="form-group"><label>CORS 代理 <span style="color:var(--text3);font-weight:normal">(可选)</span></label><div class="hint">如果 API 不支持浏览器直连，填入代理地址。留空则直连。</div><input type="text" id="cfgCorsProxy" placeholder="https://your-proxy.workers.dev 或留空"></div>
       </div>
       <div class="form-group"><label>模型列表</label><div class="hint">逗号分隔，或点"获取模型"自动拉取</div><input type="text" id="cfgModels" placeholder="gpt-4o,gpt-4o-mini"></div>
       <div class="form-group"><label>系统提示词</label><input type="text" id="cfgSystemPrompt" placeholder="You are a helpful assistant."></div>
@@ -403,6 +415,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Noto
     </div>
     <div class="form-actions">
       <button class="btn btn-sm" onclick="refreshDetection()">🔄 重新检测</button>
+      <button class="btn btn-sm" onclick="testConnection()" id="testBtn">🔌 测试连接</button>
       <button class="btn btn-primary btn-sm" onclick="fetchModels()">获取模型</button>
       <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存</button>
       <button class="btn btn-sm" onclick="closeModal('settingsModal')">取消</button>
@@ -488,6 +501,7 @@ function getConfig(){
     cliTool:localStorage.getItem('llm_cliTool')||'',
     baseUrl:localStorage.getItem('llm_baseUrl')||'',
     apiKey:localStorage.getItem('llm_apiKey')||'',
+    corsProxy:localStorage.getItem('llm_corsProxy')||'',
     models:localStorage.getItem('llm_models')||'',
     systemPrompt:localStorage.getItem('llm_systemPrompt')||'',
     temperature:parseFloat(localStorage.getItem('llm_temp'))||0.7,
@@ -502,6 +516,25 @@ function getConfig(){
   return cfg;
 }
 function saveConfig(k,v){localStorage.setItem('llm_'+k,v)}
+
+// ═══════════════════════════════════════════════════════
+//  CORS Proxy Helper
+// ═══════════════════════════════════════════════════════
+function proxyFetch(url,opts,corsProxy){
+  if(corsProxy){
+    const proxy=corsProxy.replace(/\/$/,'');
+    if(proxy.includes('?')){return fetch(proxy+'&'+encodeURIComponent(url),opts)}
+    else{return fetch(proxy+'/'+url,opts)}
+  }
+  return fetch(url,opts);
+}
+function buildApiUrl(baseUrl,endpoint){
+  let u=baseUrl.replace(/\/$/,'');
+  // 如果用户填了完整路径（如 .../chat/completions），不再追加
+  if(u.endsWith('/'+endpoint))return u;
+  if(u.endsWith(endpoint))return u;
+  return u+'/'+endpoint;
+}
 
 // ═══════════════════════════════════════════════════════
 //  Backend Detection
@@ -543,9 +576,13 @@ function updateWelcomeInfo(){
   else if(cfg.apiKey==='__env__')rows.push({l:'API Key',v:'已配置 (环境变量回退)',ok:true});
   else rows.push({l:'API Key',v:'未配置',ok:false});
   if(cfg.baseUrl)rows.push({l:'Endpoint',v:cfg.baseUrl.replace(/\/chat\/completions$/,''),ok:true});
+  if(cfg.corsProxy)rows.push({l:'CORS 代理',v:'已配置',ok:true});
   const m=document.getElementById('modelSelect').value||cfg.currentModel;
   if(m)rows.push({l:'模型',v:m,ok:true});
   info.innerHTML=rows.map(r=>`<div class="env-row"><span class="env-label">${r.l}:</span><span class="env-value${r.ok?'':' missing'}">${r.v}</span></div>`).join('');
+  // 显示/隐藏快速设置引导
+  const qs=document.getElementById('quickSetup');
+  if(qs)qs.style.display=(!cfg.apiKey||!cfg.baseUrl)?'':'none';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -555,6 +592,7 @@ function loadConfigUI(){
   const cfg=getConfig();selectedSource=cfg.source;selectedCLI=cfg.cliTool;
   document.getElementById('cfgBaseUrl').value=cfg.baseUrl;
   document.getElementById('cfgApiKey').value=cfg.apiKey;
+  document.getElementById('cfgCorsProxy').value=cfg.corsProxy||'';
   document.getElementById('cfgModels').value=cfg.models;
   document.getElementById('cfgSystemPrompt').value=cfg.systemPrompt;
   document.getElementById('cfgTemp').value=cfg.temperature;
@@ -582,6 +620,7 @@ function saveSettings(){
   saveConfig('source',selectedSource);saveConfig('cliTool',selectedCLI||'');
   saveConfig('baseUrl',document.getElementById('cfgBaseUrl').value.trim());
   saveConfig('apiKey',document.getElementById('cfgApiKey').value.trim());
+  saveConfig('corsProxy',document.getElementById('cfgCorsProxy').value.trim());
   saveConfig('models',document.getElementById('cfgModels').value.trim());
   saveConfig('systemPrompt',document.getElementById('cfgSystemPrompt').value.trim());
   saveConfig('temp',document.getElementById('cfgTemp').value);
@@ -589,15 +628,43 @@ function saveSettings(){
   closeModal('settingsModal');loadModels();updateWelcomeInfo();toast('设定已保存','success');
 }
 async function refreshDetection(){await detectBackend();loadConfigUI();toast('检测完成','success')}
+async function testConnection(){
+  const bu=document.getElementById('cfgBaseUrl').value.trim();
+  const ak=document.getElementById('cfgApiKey').value.trim();
+  const cp=document.getElementById('cfgCorsProxy').value.trim();
+  const btn=document.getElementById('testBtn');
+  if(!bu||!ak){toast('请先填写 URL 和 Key','error');return}
+  btn.textContent='⏳ 测试中...';btn.disabled=true;
+  try{
+    const testUrl=bu.replace(/\/$/,'')+'/models';
+    const r=await proxyFetch(testUrl,{headers:{'Authorization':`Bearer ${ak}`}},cp);
+    if(r.ok){
+      const d=await r.json();
+      const count=(d.data||[]).length;
+      toast('✅ 连接成功！'+(count?` 发现 ${count} 个模型`:''),'success');
+    }else{
+      const errText=await r.text().catch(()=>r.statusText);
+      toast('❌ HTTP '+r.status+': '+errText.slice(0,100),'error');
+    }
+  }catch(e){
+    if(e.message==='Failed to fetch'){
+      toast('❌ CORS 拦截：API 不支持浏览器直连，请填入 CORS 代理地址','error');
+    }else{
+      toast('❌ 连接失败: '+e.message,'error');
+    }
+  }finally{
+    btn.textContent='🔌 测试连接';btn.disabled=false;
+  }
+}
 async function fetchModels(){
   const bu=document.getElementById('cfgBaseUrl').value.trim(),ak=document.getElementById('cfgApiKey').value.trim();
+  const cp=document.getElementById('cfgCorsProxy').value.trim();
   if(!bu||!ak){toast('请先填写 URL 和 Key','error');return}
   // 直连模式：尝试直接从 API 获取模型列表
   if(selectedSource==='direct'||!API_BASE){
     try{
-      const r=await fetch(bu.replace(/\/$/,'')+'/models',{
-        headers:{'Authorization':`Bearer ${ak}`}
-      });
+      const modelsUrl=bu.replace(/\/$/,'')+'/models';
+      const r=await proxyFetch(modelsUrl,{headers:{'Authorization':`Bearer ${ak}`}},cp);
       if(r.ok){
         const d=await r.json();
         const models=(d.data||[]).map(m=>m.id).filter(Boolean);
@@ -1003,12 +1070,13 @@ async function sendCompare(){
 async function streamModel(cfg,model,messages,bodyEl,signal){
   let resp;
   if(selectedSource==='direct'||!API_BASE){
-    resp=await fetch(cfg.baseUrl.replace(/\/$/,'')+'/chat/completions',{
+    const apiUrl=buildApiUrl(cfg.baseUrl,'chat/completions');
+    resp=await proxyFetch(apiUrl,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${cfg.apiKey}`},
       body:JSON.stringify({model,messages,stream:true,temperature:cfg.temperature,max_tokens:4096}),
       signal
-    });
+    },cfg.corsProxy);
   }else{
     resp=await fetch(API_BASE+'/api/chat',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -1073,12 +1141,13 @@ async function sendMessage(text){
     if(selectedSource==='direct'||!API_BASE){
       // 直连模式：浏览器直接调用 LLM API
       if(!cfg.baseUrl||!cfg.apiKey){throw new Error('请先在设定中填写 API Base URL 和 API Key')}
-      resp=await fetch(cfg.baseUrl.replace(/\/$/,'')+'/chat/completions',{
+      const apiUrl=buildApiUrl(cfg.baseUrl,'chat/completions');
+      resp=await proxyFetch(apiUrl,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${cfg.apiKey}`},
         body:JSON.stringify({model,messages:apiMessages,stream:true,temperature:cfg.temperature,max_tokens:4096}),
         signal:abortController.signal
-      });
+      },cfg.corsProxy);
     }else{
       // 后端代理模式
       resp=await fetch(API_BASE+'/api/chat',{
@@ -1102,7 +1171,18 @@ async function sendMessage(text){
   }catch(e){
     bodyEl.classList.remove('streaming-cursor');
     if(e.name==='AbortError')bodyEl.innerHTML=renderMd(conv.messages[aiIdx].content||'*[已停止]*');
-    else{bodyEl.innerHTML=`<span style="color:var(--red)">❌ ${esc(e.message)}</span>`;conv.messages[aiIdx].content=''}
+    else{
+      let errMsg=e.message;
+      // CORS 错误友好提示
+      if(e.message==='Failed to fetch'||e.message.includes('NetworkError')){
+        errMsg='请求被浏览器 CORS 策略拦截。解决方案：\n\n1. 在设定中填入 CORS 代理地址\n2. 或使用支持 CORS 的 API 服务商\n3. 或部署自己的 CORS 代理（如 Cloudflare Worker）';
+      }else if(e.message.includes('401')||e.message.includes('Unauthorized')){
+        errMsg='API Key 无效或已过期，请在设定中检查';
+      }else if(e.message.includes('429')){
+        errMsg='请求频率超限，请稍后再试';
+      }
+      bodyEl.innerHTML=`<span style="color:var(--red)">❌ ${esc(errMsg)}</span>`;conv.messages[aiIdx].content=''
+    }
   }finally{
     isStreaming=false;abortController=null;conv.updatedAt=Date.now();saveConversations();
     updateInputState();addCodeRunButtons();document.getElementById('userInput').focus();
