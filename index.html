@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Chat</title>
+<style>
+:root {
+  --bg:#0f0f14; --bg2:#16161e; --bg3:#1c1c28; --sidebar:#13131b;
+  --card:#1a1a26; --hover:#22222e; --border:#2a2a3a;
+  --text:#e4e4ed; --text2:#7a7a90; --text3:#555568;
+  --accent:#6c5ce7; --accent2:#a29bfe; --green:#00cec9;
+  --orange:#fdcb6e; --red:#ff6b6b; --blue:#74b9ff;
+  --input-bg:#1a1a26; --radius:12px; --sidebar-w:280px; --topbar-h:56px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Noto Sans SC',sans-serif;background:var(--bg);color:var(--text);display:flex;overflow:hidden}
+::selection{background:var(--accent);color:#fff}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+
+/* Sidebar */
+.sidebar{width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;transition:transform .3s;z-index:20}
+.sidebar-header{padding:16px;border-bottom:1px solid var(--border)}
+.new-chat-btn{width:100%;padding:12px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:.9rem;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .2s;font-family:inherit}
+.new-chat-btn:hover{background:var(--hover);border-color:var(--accent)}
+.sidebar-search{padding:8px 16px}
+.sidebar-search input{width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;outline:none;font-family:inherit}
+.sidebar-search input:focus{border-color:var(--accent)}
+.sidebar-search input::placeholder{color:var(--text3)}
+.conv-list{flex:1;overflow-y:auto;padding:8px}
+.conv-item{padding:10px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:2px;transition:background .15s}
+.conv-item:hover{background:var(--hover)}
+.conv-item.active{background:var(--bg3)}
+.conv-item .conv-icon{font-size:.9rem;flex-shrink:0}
+.conv-item .conv-title{flex:1;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-item .conv-delete{opacity:0;width:24px;height:24px;border-radius:6px;border:none;background:transparent;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;transition:all .15s;flex-shrink:0}
+.conv-item:hover .conv-delete{opacity:1}
+.conv-item .conv-delete:hover{background:#ff6b6b22;color:var(--red)}
+.sidebar-footer{padding:12px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:4px}
+.sidebar-btn{width:100%;padding:8px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:.82rem;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .15s;font-family:inherit}
+.sidebar-btn:hover{background:var(--hover);color:var(--text)}
+
+/* Main */
+.main{flex:1;display:flex;flex-direction:column;height:100vh;min-width:0;position:relative}
+.topbar{height:var(--topbar-h);min-height:var(--topbar-h);padding:0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--bg)}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.menu-toggle{display:none;width:36px;height:36px;border-radius:8px;border:none;background:transparent;color:var(--text);cursor:pointer;font-size:1.2rem;align-items:center;justify-content:center}
+.model-select{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:.85rem;outline:none;cursor:pointer;font-family:inherit;max-width:220px}
+.topbar-right{display:flex;align-items:center;gap:6px}
+.icon-btn{width:34px;height:34px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1rem;transition:all .15s;position:relative}
+.icon-btn:hover{background:var(--hover);color:var(--text)}
+.icon-btn.active{color:var(--accent);background:rgba(108,92,231,.12)}
+.icon-btn .badge{position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:var(--green)}
+.backend-badge{padding:4px 10px;border-radius:50px;font-size:.72rem;font-weight:600;display:flex;align-items:center;gap:4px;white-space:nowrap}
+.backend-badge.connected{background:rgba(0,206,201,.12);color:var(--green);border:1px solid rgba(0,206,201,.25)}
+.backend-badge.local{background:rgba(108,92,231,.12);color:var(--accent2);border:1px solid rgba(108,92,231,.25)}
+.backend-badge.offline{background:rgba(255,107,107,.1);color:var(--red);border:1px solid rgba(255,107,107,.2)}
+.token-display{padding:4px 10px;border-radius:6px;background:var(--bg3);font-size:.72rem;color:var(--text2);font-family:'SF Mono',monospace;display:flex;align-items:center;gap:6px;cursor:pointer}
+.token-display:hover{background:var(--hover)}
+
+/* Chat Area */
+.chat-area{flex:1;overflow-y:auto;display:flex}
+.chat-container{max-width:800px;margin:0 auto;padding:24px 20px;flex:1}
+.chat-container.with-artifacts{max-width:60%}
+
+/* Artifacts Panel */
+.artifacts-panel{width:40%;min-width:300px;max-width:50%;border-left:1px solid var(--border);background:var(--bg2);display:none;flex-direction:column;overflow:hidden}
+.artifacts-panel.open{display:flex}
+.artifacts-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.artifacts-header h4{font-size:.9rem;display:flex;align-items:center;gap:6px}
+.artifacts-tabs{display:flex;gap:4px}
+.artifacts-tab{padding:4px 12px;border-radius:6px;border:none;background:transparent;color:var(--text2);font-size:.78rem;cursor:pointer;font-family:inherit;transition:all .15s}
+.artifacts-tab.active{background:var(--accent);color:#fff}
+.artifacts-body{flex:1;overflow:auto;padding:0}
+.artifacts-body iframe{width:100%;height:100%;border:none;background:#fff}
+.artifacts-body pre{margin:0;padding:16px;font-size:.82rem;line-height:1.6;background:var(--bg);min-height:100%}
+
+/* Welcome */
+.welcome{text-align:center;padding:60px 20px 30px}
+.welcome h2{font-size:1.8rem;font-weight:700;margin-bottom:8px;background:linear-gradient(135deg,var(--accent),var(--accent2),#fd79a8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.welcome p{color:var(--text2);font-size:.95rem;margin-bottom:4px}
+.welcome .env-info{margin-top:1.5rem;padding:16px 20px;border-radius:12px;border:1px solid var(--border);background:var(--card);display:inline-block;text-align:left;font-size:.82rem}
+.welcome .env-row{display:flex;gap:8px;margin-bottom:4px}
+.welcome .env-label{color:var(--text2);min-width:80px}
+.welcome .env-value{color:var(--green);font-weight:600}
+.welcome .env-value.missing{color:var(--red)}
+.welcome-suggestions{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;max-width:560px;margin:1.5rem auto 0}
+.suggestion-card{padding:16px;border-radius:12px;border:1px solid var(--border);background:var(--card);cursor:pointer;text-align:left;font-size:.85rem;color:var(--text);transition:all .2s;font-family:inherit}
+.suggestion-card:hover{border-color:var(--accent);background:var(--hover)}
+.sug-title{font-weight:600;margin-bottom:4px}
+.sug-desc{color:var(--text2);font-size:.78rem}
+
+/* Messages */
+.message{display:flex;gap:12px;margin-bottom:24px;animation:msgIn .3s ease;position:relative}
+@keyframes msgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.msg-avatar{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;flex-shrink:0;margin-top:2px}
+.message.user .msg-avatar{background:var(--accent);color:#fff}
+.message.assistant .msg-avatar{background:var(--green);color:#fff}
+.msg-content{flex:1;min-width:0}
+.msg-role{font-size:.78rem;font-weight:600;margin-bottom:4px;color:var(--text2);display:flex;align-items:center;gap:8px}
+.msg-role .model-tag{font-size:.68rem;padding:1px 6px;border-radius:4px;background:var(--bg3);color:var(--text3)}
+.msg-body{font-size:.92rem;line-height:1.75;word-break:break-word}
+.msg-body p{margin-bottom:.7em}.msg-body p:last-child{margin-bottom:0}
+.msg-body code{background:var(--bg3);padding:2px 6px;border-radius:4px;font-family:'SF Mono','Fira Code','Consolas',monospace;font-size:.85em}
+.msg-body pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;margin:8px 0;position:relative}
+.msg-body pre code{background:transparent;padding:0;font-size:.82rem;line-height:1.6}
+.msg-body pre .code-copy{position:absolute;top:8px;right:8px;padding:4px 10px;border-radius:6px;border:none;background:var(--bg3);color:var(--text2);font-size:.72rem;cursor:pointer;font-family:inherit;opacity:0;transition:opacity .15s}
+.msg-body pre:hover .code-copy{opacity:1}
+.msg-body pre .code-copy:hover{background:var(--hover);color:var(--text)}
+.msg-body pre .code-run{position:absolute;top:8px;right:60px;padding:4px 10px;border-radius:6px;border:none;background:rgba(0,206,201,.12);color:var(--green);font-size:.72rem;cursor:pointer;font-family:inherit;opacity:0;transition:opacity .15s}
+.msg-body pre:hover .code-run{opacity:1}
+.msg-body blockquote{border-left:3px solid var(--accent);padding:8px 16px;margin:8px 0;color:var(--text2);background:var(--bg3);border-radius:0 8px 8px 0}
+.msg-body ul,.msg-body ol{padding-left:1.5em;margin:8px 0}
+.msg-body li{margin-bottom:4px}
+.msg-body h1,.msg-body h2,.msg-body h3,.msg-body h4{margin:1em 0 .5em;font-weight:700}
+.msg-body h1{font-size:1.3em}.msg-body h2{font-size:1.15em}.msg-body h3{font-size:1.05em;color:var(--accent2)}
+.msg-body strong{color:var(--accent2)}
+.msg-body a{color:var(--accent2);text-decoration:none}
+.msg-body a:hover{text-decoration:underline}
+.msg-body table{border-collapse:collapse;margin:8px 0;width:100%;font-size:.85rem}
+.msg-body th,.msg-body td{border:1px solid var(--border);padding:6px 10px;text-align:left}
+.msg-body th{background:var(--bg3);font-weight:600}
+.msg-body hr{border:none;border-top:1px solid var(--border);margin:1em 0}
+.msg-actions{display:flex;gap:4px;margin-top:8px;opacity:0;transition:opacity .15s;flex-wrap:wrap}
+.message:hover .msg-actions{opacity:1}
+.msg-action-btn{padding:4px 10px;border-radius:6px;border:none;background:var(--bg3);color:var(--text2);font-size:.73rem;cursor:pointer;display:flex;align-items:center;gap:4px;transition:all .15s;font-family:inherit}
+.msg-action-btn:hover{background:var(--hover);color:var(--text)}
+.msg-action-btn.danger:hover{background:rgba(255,107,107,.12);color:var(--red)}
+.msg-edit-area{width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--bg);color:var(--text);font-size:.92rem;line-height:1.5;resize:vertical;outline:none;font-family:inherit;min-height:60px;max-height:300px}
+.msg-edit-actions{display:flex;gap:6px;margin-top:6px}
+
+/* Thinking */
+.thinking-block{margin:8px 0;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.thinking-header{padding:8px 12px;background:var(--bg3);cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--text2);user-select:none}
+.thinking-header .arrow{transition:transform .2s;display:inline-block}
+.thinking-block.open .thinking-header .arrow{transform:rotate(90deg)}
+.thinking-body{display:none;padding:12px;font-size:.85rem;color:var(--text2);line-height:1.6;border-top:1px solid var(--border);white-space:pre-wrap}
+.thinking-block.open .thinking-body{display:block}
+
+/* Code Output */
+.code-output{margin:8px 0;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.code-output-header{padding:6px 12px;background:var(--bg3);display:flex;align-items:center;justify-content:space-between;font-size:.78rem;color:var(--text2)}
+.code-output-header .status-ok{color:var(--green)}.code-output-header .status-err{color:var(--red)}
+.code-output-body{padding:12px;font-family:'SF Mono','Consolas',monospace;font-size:.82rem;line-height:1.5;white-space:pre-wrap;max-height:400px;overflow-y:auto;background:var(--bg)}
+
+/* Fork Branch */
+.fork-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:rgba(108,92,231,.12);color:var(--accent2);font-size:.7rem;margin-bottom:4px}
+.branch-line{position:absolute;left:15px;top:40px;bottom:-24px;width:2px;background:var(--border)}
+.message.forked{margin-left:20px}
+.message.forked::before{content:'';position:absolute;left:-12px;top:16px;width:12px;height:2px;background:var(--border)}
+
+/* Streaming */
+.streaming-cursor::after{content:'▊';animation:blink .8s infinite;color:var(--accent2)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* Input */
+.input-area{padding:16px 20px 20px;background:var(--bg)}
+.input-wrapper{max-width:800px;margin:0 auto;position:relative}
+.input-box{display:flex;align-items:flex-end;gap:8px;background:var(--input-bg);border:1px solid var(--border);border-radius:16px;padding:8px 12px;transition:border-color .2s}
+.input-box:focus-within{border-color:var(--accent)}
+.input-tools{display:flex;gap:2px;padding-bottom:4px}
+.input-tool-btn{width:30px;height:30px;border-radius:6px;border:none;background:transparent;color:var(--text3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.9rem;transition:all .15s}
+.input-tool-btn:hover{background:var(--hover);color:var(--text2)}
+.input-box textarea{flex:1;border:none;background:transparent;color:var(--text);font-size:.92rem;line-height:1.5;resize:none;outline:none;font-family:inherit;max-height:200px;min-height:24px}
+.input-box textarea::placeholder{color:var(--text3)}
+.send-btn{width:34px;height:34px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.95rem;transition:all .2s;flex-shrink:0}
+.send-btn:hover{background:var(--accent2)}.send-btn:disabled{opacity:.4;cursor:not-allowed}
+.stop-btn{width:34px;height:34px;border-radius:10px;border:2px solid var(--red);background:transparent;color:var(--red);cursor:pointer;display:none;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0}
+.input-hint{text-align:center;margin-top:6px;font-size:.7rem;color:var(--text3);display:flex;justify-content:center;gap:16px}
+.input-hint kbd{padding:1px 5px;border-radius:3px;background:var(--bg3);border:1px solid var(--border);font-size:.68rem;font-family:inherit}
+
+/* Compare Mode */
+.compare-container{display:flex;gap:0;flex:1;overflow:hidden}
+.compare-pane{flex:1;display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden}
+.compare-pane:last-child{border-right:none}
+.compare-pane-header{padding:8px 16px;border-bottom:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;gap:8px;font-size:.82rem}
+.compare-pane-header select{padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.8rem;font-family:inherit}
+.compare-pane .chat-area{flex:1}
+.compare-input{padding:12px 16px;border-top:1px solid var(--border);background:var(--bg)}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:560px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-header h3{font-size:1.1rem}
+.modal-close{width:32px;height:32px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--hover);color:var(--text)}
+.modal-body{padding:20px 24px}
+.form-group{margin-bottom:18px}
+.form-group label{display:block;font-size:.85rem;font-weight:600;margin-bottom:4px;color:var(--text)}
+.form-group .hint{font-size:.75rem;color:var(--text3);margin-bottom:5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.88rem;outline:none;font-family:inherit}
+.form-group input:focus,.form-group select:focus{border-color:var(--accent)}
+.form-group input::placeholder{color:var(--text3)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border);flex-wrap:wrap}
+.btn{padding:10px 20px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:.88rem;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn:hover{background:var(--hover)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent2)}
+.btn-sm{padding:6px 14px;font-size:.8rem}
+
+/* Tool cards */
+.tool-cards{display:flex;flex-direction:column;gap:10px;margin:12px 0}
+.tool-card{padding:12px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .2s}
+.tool-card:hover{border-color:var(--accent)}
+.tool-card.selected{border-color:var(--green);background:rgba(0,206,201,.06)}
+.tool-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;background:rgba(108,92,231,.12)}
+.tool-card.selected .tool-icon{background:rgba(0,206,201,.15)}
+.tool-name{font-weight:600;font-size:.88rem}
+.tool-desc{font-size:.75rem;color:var(--text2);margin-top:2px}
+
+/* Mask Panel */
+.mask-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:12px 0}
+.mask-card{padding:14px;border-radius:10px;border:1px solid var(--border);background:var(--card);cursor:pointer;transition:all .2s;text-align:center}
+.mask-card:hover{border-color:var(--accent);background:var(--hover)}
+.mask-card .mask-emoji{font-size:2rem;margin-bottom:6px}
+.mask-card .mask-name{font-weight:600;font-size:.85rem;margin-bottom:2px}
+.mask-card .mask-desc{font-size:.72rem;color:var(--text2)}
+
+/* Shortcuts Panel */
+.shortcut-list{display:grid;gap:8px}
+.shortcut-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:var(--bg3)}
+.shortcut-item .keys{display:flex;gap:4px}
+.shortcut-item kbd{padding:3px 8px;border-radius:4px;background:var(--bg);border:1px solid var(--border);font-size:.78rem;font-family:'SF Mono',monospace}
+.shortcut-item .desc{font-size:.82rem;color:var(--text2)}
+
+/* Toast */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:10px;font-size:.85rem;z-index:200;animation:toastIn .3s ease;pointer-events:none}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.toast.success{background:rgba(0,206,201,.15);color:var(--green);border:1px solid rgba(0,206,201,.3)}
+.toast.error{background:rgba(255,107,107,.15);color:var(--red);border:1px solid rgba(255,107,107,.3)}
+.toast.info{background:rgba(108,92,231,.15);color:var(--accent2);border:1px solid rgba(108,92,231,.3)}
+
+/* Scrollbar for compare */
+.compare-pane .chat-area::-webkit-scrollbar{width:4px}
+
+@media(max-width:768px){
+  .sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .menu-toggle{display:flex}
+  .welcome-suggestions{grid-template-columns:1fr}
+  .form-row{grid-template-columns:1fr}
+  .artifacts-panel{display:none!important}
+  .chat-container.with-artifacts{max-width:100%!important}
+  .compare-container{flex-direction:column}
+}
+.sidebar-mask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:15}
+@media(max-width:768px){.sidebar-mask.show{display:block}}
+</style>
+</head>
+<body>
+
+<div class="sidebar-mask" id="sidebarMask" onclick="toggleSidebar()"></div>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <button class="new-chat-btn" onclick="newConversation()">＋ 新对话</button>
+  </div>
+  <div class="sidebar-search">
+    <input type="text" placeholder="搜索对话..." id="convSearch" oninput="filterConversations(this.value)">
+  </div>
+  <div class="conv-list" id="convList"></div>
+  <div class="sidebar-footer">
+    <button class="sidebar-btn" onclick="showMasks()">🎭 角色面具</button>
+    <button class="sidebar-btn" onclick="exportAll()">📤 导出全部</button>
+    <button class="sidebar-btn" onclick="document.getElementById('importFile').click()">📥 导入对话</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importConversations(event)">
+    <button class="sidebar-btn" onclick="openSettings()">⚙️ 设定</button>
+    <button class="sidebar-btn" onclick="showShortcuts()">⌨️ 快捷键</button>
+  </div>
+</aside>
+
+<div class="main" id="mainArea">
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <select class="model-select" id="modelSelect" onchange="onModelChange()"></select>
+      <div class="token-display" id="tokenDisplay" onclick="showTokenStats()" style="display:none">
+        <span id="tokenIn">0</span>→<span id="tokenOut">0</span>
+      </div>
+      <div class="backend-badge offline" id="backendBadge">检测中...</div>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" id="compareBtn" title="多模型对比 (Ctrl+M)" onclick="toggleCompare()">⚔️</button>
+      <button class="icon-btn" id="artifactsBtn" title="Artifacts 面板" onclick="toggleArtifacts()">🖼️</button>
+      <button class="icon-btn" title="重新生成" onclick="regenerateLast()">🔄</button>
+      <button class="icon-btn" title="清除对话" onclick="clearCurrentChat()">🗑️</button>
+    </div>
+  </header>
+
+  <div class="chat-area" id="chatArea">
+    <div class="chat-container" id="chatContainer">
+      <div class="welcome" id="welcomeScreen">
+        <h2>LLM Chat</h2>
+        <p>支持本地 CLI 工具 + OpenAI 兼容 API</p>
+        <div class="env-info" id="envInfo"></div>
+        <div class="welcome-suggestions">
+          <button class="suggestion-card" onclick="useSuggestion('请用简单的语言解释量子计算')"><div class="sug-title">💡 解释概念</div><div class="sug-desc">用简单的语言解释一个复杂概念</div></button>
+          <button class="suggestion-card" onclick="useSuggestion('请帮我写一个快速排序算法，用 Python 实现')"><div class="sug-title">💻 写代码</div><div class="sug-desc">帮我写一段功能代码</div></button>
+          <button class="suggestion-card" onclick="useSuggestion('请帮我写一篇关于 AI 发展趋势的文章')"><div class="sug-title">📝 写文章</div><div class="sug-desc">帮我撰写一篇文章或报告</div></button>
+          <button class="suggestion-card" onclick="useSuggestion('请分析微服务架构的优缺点')"><div class="sug-title">🔍 分析问题</div><div class="sug-desc">帮我分析一个复杂问题</div></button>
+        </div>
+      </div>
+    </div>
+    <div class="artifacts-panel" id="artifactsPanel">
+      <div class="artifacts-header">
+        <h4>🖼️ Artifacts</h4>
+        <div class="artifacts-tabs">
+          <button class="artifacts-tab active" onclick="switchArtifactTab('preview',this)">预览</button>
+          <button class="artifacts-tab" onclick="switchArtifactTab('code',this)">代码</button>
+        </div>
+      </div>
+      <div class="artifacts-body" id="artifactsBody">
+        <iframe id="artifactsFrame" sandbox="allow-scripts allow-same-origin"></iframe>
+        <pre id="artifactsCode" style="display:none"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compare Mode Container (hidden by default) -->
+  <div class="compare-container" id="compareContainer" style="display:none">
+    <div class="compare-pane">
+      <div class="compare-pane-header">
+        模型 A:
+        <select id="compareModelA" onchange="onCompareModelChange()"></select>
+      </div>
+      <div class="chat-area" id="compareChatA" style="flex:1;overflow-y:auto;padding:16px"></div>
+    </div>
+    <div class="compare-pane">
+      <div class="compare-pane-header">
+        模型 B:
+        <select id="compareModelB" onchange="onCompareModelChange()"></select>
+      </div>
+      <div class="chat-area" id="compareChatB" style="flex:1;overflow-y:auto;padding:16px"></div>
+    </div>
+  </div>
+
+  <div class="input-area" id="inputArea">
+    <div class="input-wrapper">
+      <div class="input-box">
+        <div class="input-tools">
+          <button class="input-tool-btn" title="附件 (文件内容插入)" onclick="attachFile()">📎</button>
+        </div>
+        <textarea id="userInput" placeholder="输入消息... (Shift+Enter 换行)" rows="1" onkeydown="onInputKeydown(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">▶</button>
+        <button class="stop-btn" id="stopBtn" onclick="stopGeneration()">■</button>
+      </div>
+      <div class="input-hint">
+        <span><kbd>Enter</kbd> 发送</span>
+        <span><kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</span>
+        <span><kbd>Ctrl</kbd>+<kbd>M</kbd> 对比模式</span>
+        <span><kbd>Ctrl</kbd>+<kbd>N</kbd> 新对话</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header"><h3>⚙️ 设定</h3><button class="modal-close" onclick="closeModal('settingsModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>数据源</label>
+        <div class="hint">选择 API 调用方式</div>
+        <div class="tool-cards" id="sourceCards">
+          <div class="tool-card" data-source="backend" onclick="selectSource('backend')"><div class="tool-icon">🖥️</div><div><div class="tool-name">本地后端代理</div><div class="tool-desc">通过 Node.js 后端，自动检测本地 CLI 工具</div></div></div>
+          <div class="tool-card" data-source="direct" onclick="selectSource('direct')"><div class="tool-icon">🌐</div><div><div class="tool-name">直连 API</div><div class="tool-desc">浏览器直接调用 OpenAI 兼容 API</div></div></div>
+        </div>
+      </div>
+      <div id="cliSection" style="display:none">
+        <div class="form-group"><label>本地工具</label><div class="tool-cards" id="cliToolCards"></div></div>
+      </div>
+      <div id="apiConfigSection">
+        <div class="form-group"><label>API Base URL</label><div class="hint">OpenAI 兼容端点</div><input type="text" id="cfgBaseUrl" placeholder="https://api.openai.com/v1"></div>
+        <div class="form-group"><label>API Key</label><div class="hint">数据仅存储在本地浏览器</div><input type="password" id="cfgApiKey" placeholder="sk-..."></div>
+      </div>
+      <div class="form-group"><label>模型列表</label><div class="hint">逗号分隔，或点"获取模型"自动拉取</div><input type="text" id="cfgModels" placeholder="gpt-4o,gpt-4o-mini"></div>
+      <div class="form-group"><label>系统提示词</label><input type="text" id="cfgSystemPrompt" placeholder="You are a helpful assistant."></div>
+      <div class="form-row">
+        <div class="form-group"><label>Temperature</label><input type="number" id="cfgTemp" placeholder="0.7" min="0" max="2" step="0.1"></div>
+        <div class="form-group"><label>上下文消息数</label><input type="number" id="cfgMaxHistory" placeholder="20" min="1" max="200"></div>
+      </div>
+      <div class="form-group">
+        <label>通知设置</label>
+        <div class="tool-cards">
+          <div class="tool-card${localStorage.getItem('llm_soundOff')==='1'?'':' selected'}" id="soundToggle" onclick="toggleSound()">
+            <div class="tool-icon">🔊</div>
+            <div><div class="tool-name">完成提示音</div><div class="tool-desc">回复生成完毕时播放提示音</div></div>
+          </div>
+          <div class="tool-card${localStorage.getItem('llm_notifyOff')==='1'?'':' selected'}" id="notifyToggle" onclick="toggleNotify()">
+            <div class="tool-icon">🔔</div>
+            <div><div class="tool-name">桌面通知</div><div class="tool-desc">回复完成时弹出系统通知（需授权）</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-sm" onclick="refreshDetection()">🔄 重新检测</button>
+      <button class="btn btn-primary btn-sm" onclick="fetchModels()">获取模型</button>
+      <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存</button>
+      <button class="btn btn-sm" onclick="closeModal('settingsModal')">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mask Modal -->
+<div class="modal-overlay" id="maskModal">
+  <div class="modal" style="width:640px">
+    <div class="modal-header"><h3>🎭 角色面具</h3><button class="modal-close" onclick="closeModal('maskModal')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:.85rem;color:var(--text2);margin-bottom:12px">选择一个预设角色，自动设置系统提示词</p>
+      <div class="mask-grid" id="maskGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Shortcuts Modal -->
+<div class="modal-overlay" id="shortcutsModal">
+  <div class="modal">
+    <div class="modal-header"><h3>⌨️ 快捷键</h3><button class="modal-close" onclick="closeModal('shortcutsModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="shortcut-list" id="shortcutList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Token Stats Modal -->
+<div class="modal-overlay" id="tokenModal">
+  <div class="modal">
+    <div class="modal-header"><h3>📊 Token 统计</h3><button class="modal-close" onclick="closeModal('tokenModal')">✕</button></div>
+    <div class="modal-body" id="tokenStatsBody"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════
+let conversations={}, currentConvId=null, isStreaming=false, abortController=null;
+let detectedTools=[], envConfig={}, selectedSource='backend', selectedCLI=null;
+let compareMode=false;
+let sessionTokens={in:0,out:0,history:[]};
+const API_BASE = location.protocol==='file:' ? 'http://localhost:3210' : '';
+
+// ═══════════════════════════════════════════════════════
+//  Masks (角色面具)
+// ═══════════════════════════════════════════════════════
+const MASKS = [
+  {emoji:'🤖',name:'通用助手',desc:'友好的 AI 助手',system:'You are a helpful, friendly AI assistant.'},
+  {emoji:'💻',name:'编程专家',desc:'精通所有编程语言',system:'You are an expert programmer. Write clean, efficient, well-documented code. Explain your reasoning step by step.'},
+  {emoji:'📝',name:'写作大师',desc:'专业的写作助手',system:'You are a professional writer. Help users craft compelling, well-structured content with vivid language.'},
+  {emoji:'🔬',name:'科研助手',desc:'严谨的科学分析',system:'You are a scientific research assistant. Provide rigorous, evidence-based analysis. Cite sources when possible.'},
+  {emoji:'🎨',name:'创意顾问',desc:'头脑风暴专家',system:'You are a creative consultant. Think outside the box, offer unconventional ideas, and help brainstorm innovative solutions.'},
+  {emoji:'📖',name:'翻译官',desc:'精通多国语言',system:'You are a professional translator fluent in all major languages. Provide accurate, natural translations preserving nuance and tone.'},
+  {emoji:'🎓',name:'教师',desc:'循循善诱的老师',system:'You are a patient teacher. Explain complex concepts using simple analogies and examples. Use the Socratic method to guide understanding.'},
+  {emoji:'📊',name:'数据分析师',desc:'数据洞察专家',system:'You are a data analyst. Help users analyze data, create visualizations, and derive actionable insights from numbers.'},
+  {emoji:'🕵️',name:'批判思考者',desc:'挑战假设',system:'You are a critical thinker. Challenge assumptions, identify logical fallacies, and present counterarguments. Be respectful but rigorous.'},
+  {emoji:'🎮',name:'角色扮演',desc:'沉浸式角色扮演',system:'You are a creative roleplay partner. Stay in character, describe scenes vividly, and respond dynamically to the user\'s actions.'},
+];
+
+// ═══════════════════════════════════════════════════════
+//  Shortcuts
+// ═══════════════════════════════════════════════════════
+const SHORTCUTS = [
+  {keys:['Enter'],desc:'发送消息',action:()=>sendMessage()},
+  {keys:['Shift','Enter'],desc:'换行',action:null},
+  {keys:['Ctrl','N'],desc:'新对话',action:()=>newConversation()},
+  {keys:['Ctrl','M'],desc:'切换对比模式',action:()=>toggleCompare()},
+  {keys:['Ctrl','E'],desc:'导出当前对话',action:()=>exportCurrent()},
+  {keys:['Ctrl','/'],desc:'快捷键帮助',action:()=>showShortcuts()},
+  {keys:['Escape'],desc:'关闭弹窗/停止生成',action:()=>{closeAllModals();if(isStreaming)stopGeneration()}},
+  {keys:['Ctrl','1-9'],desc:'切换对话',action:null},
+];
+
+// ═══════════════════════════════════════════════════════
+//  Config
+// ═══════════════════════════════════════════════════════
+function getConfig(){
+  const cfg={
+    source:localStorage.getItem('llm_source')||'direct',
+    cliTool:localStorage.getItem('llm_cliTool')||'',
+    baseUrl:localStorage.getItem('llm_baseUrl')||'',
+    apiKey:localStorage.getItem('llm_apiKey')||'',
+    models:localStorage.getItem('llm_models')||'',
+    systemPrompt:localStorage.getItem('llm_systemPrompt')||'',
+    temperature:parseFloat(localStorage.getItem('llm_temp'))||0.7,
+    maxHistory:parseInt(localStorage.getItem('llm_maxHistory'))||20,
+    currentModel:localStorage.getItem('llm_currentModel')||''
+  };
+  // 环境变量回退：如果浏览器未配 apiKey，使用后端检测到的环境变量
+  if(!cfg.apiKey && envConfig.MIMO_API_KEY){
+    cfg.apiKey='__env__';// 占位符，后端识别后使用环境变量
+    cfg._apiKeySource='env';
+  }
+  return cfg;
+}
+function saveConfig(k,v){localStorage.setItem('llm_'+k,v)}
+
+// ═══════════════════════════════════════════════════════
+//  Backend Detection
+// ═══════════════════════════════════════════════════════
+async function detectBackend(){
+  const badge=document.getElementById('backendBadge');
+  // GitHub Pages 或纯静态模式：跳过后端检测，直接进入直连模式
+  if(location.hostname.endsWith('.github.io')||!API_BASE){
+    badge.className='backend-badge local';badge.innerHTML='🌐 直连模式';
+    selectedSource='direct';
+    updateWelcomeInfo();loadModels();return;
+  }
+  try{
+    const r=await fetch(API_BASE+'/api/detect');
+    if(!r.ok)throw new Error();
+    const d=await r.json();
+    detectedTools=d.tools||[];envConfig=d.env||{};
+    if(detectedTools.length>0){badge.className='backend-badge connected';badge.innerHTML='🟢 已连接'}
+    else{badge.className='backend-badge local';badge.innerHTML='🟡 后端在线'}
+    const cfg=getConfig();
+    if(!cfg.cliTool&&detectedTools.length>0){
+      selectedCLI=detectedTools[0].id;saveConfig('cliTool',selectedCLI);
+      if(detectedTools[0].defaults?.endpoint&&!cfg.baseUrl)saveConfig('baseUrl',detectedTools[0].defaults.endpoint);
+      if(detectedTools[0].defaults?.model&&!cfg.models)saveConfig('models',detectedTools[0].defaults.model);
+    }
+  }catch{
+    if(badge){badge.className='backend-badge offline';badge.innerHTML='🔴 离线'}
+  }
+  updateWelcomeInfo();loadModels();
+}
+
+function updateWelcomeInfo(){
+  const info=document.getElementById('envInfo');if(!info)return;
+  const cfg=getConfig();const rows=[];
+  rows.push({l:'模式',v:cfg.source==='backend'?'本地后端代理':'直连 API',ok:true});
+  if(cfg.source==='backend'&&detectedTools.length)rows.push({l:'检测到',v:detectedTools.map(t=>t.name).join(', '),ok:true});
+  if(envConfig.MIMO_API_KEY)rows.push({l:'API Key',v:'已配置 (环境变量 MIMO_API_KEY)',ok:true});
+  else if(cfg.apiKey&&cfg.apiKey!=='__env__')rows.push({l:'API Key',v:'已配置 (浏览器存储)',ok:true});
+  else if(cfg.apiKey==='__env__')rows.push({l:'API Key',v:'已配置 (环境变量回退)',ok:true});
+  else rows.push({l:'API Key',v:'未配置',ok:false});
+  if(cfg.baseUrl)rows.push({l:'Endpoint',v:cfg.baseUrl.replace(/\/chat\/completions$/,''),ok:true});
+  const m=document.getElementById('modelSelect').value||cfg.currentModel;
+  if(m)rows.push({l:'模型',v:m,ok:true});
+  info.innerHTML=rows.map(r=>`<div class="env-row"><span class="env-label">${r.l}:</span><span class="env-value${r.ok?'':' missing'}">${r.v}</span></div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  Settings
+// ═══════════════════════════════════════════════════════
+function loadConfigUI(){
+  const cfg=getConfig();selectedSource=cfg.source;selectedCLI=cfg.cliTool;
+  document.getElementById('cfgBaseUrl').value=cfg.baseUrl;
+  document.getElementById('cfgApiKey').value=cfg.apiKey;
+  document.getElementById('cfgModels').value=cfg.models;
+  document.getElementById('cfgSystemPrompt').value=cfg.systemPrompt;
+  document.getElementById('cfgTemp').value=cfg.temperature;
+  document.getElementById('cfgMaxHistory').value=cfg.maxHistory;
+  document.querySelectorAll('#sourceCards .tool-card').forEach(c=>c.classList.toggle('selected',c.dataset.source===selectedSource));
+  renderCLISection();updateSourceVisibility();
+}
+function selectSource(s){selectedSource=s;saveConfig('source',s);document.querySelectorAll('#sourceCards .tool-card').forEach(c=>c.classList.toggle('selected',c.dataset.source===s));updateSourceVisibility()}
+function updateSourceVisibility(){document.getElementById('cliSection').style.display=selectedSource==='backend'?'':'none';document.getElementById('apiConfigSection').style.display=selectedSource==='direct'?'':'none'}
+function renderCLISection(){
+  const c=document.getElementById('cliToolCards');
+  if(!detectedTools.length){c.innerHTML='<div style="color:var(--text2);font-size:.82rem;padding:8px">未检测到本地工具</div>';return}
+  c.innerHTML=detectedTools.map(t=>`<div class="tool-card${t.id===selectedCLI?' selected':''}" data-cli="${t.id}" onclick="selectCLITool('${t.id}')"><div class="tool-icon">🔧</div><div><div class="tool-name">${t.name}</div><div class="tool-desc">${t.defaults?.endpoint||''} · ${t.defaults?.model||''}</div></div></div>`).join('');
+}
+function selectCLITool(id){
+  selectedCLI=id;saveConfig('cliTool',id);
+  document.querySelectorAll('#cliToolCards .tool-card').forEach(c=>c.classList.toggle('selected',c.dataset.cli===id));
+  const t=detectedTools.find(t=>t.id===id);
+  if(t?.defaults){if(t.defaults.endpoint)document.getElementById('cfgBaseUrl').value=t.defaults.endpoint;if(t.defaults.model)document.getElementById('cfgModels').value=t.defaults.model}
+}
+function openSettings(){loadConfigUI();document.getElementById('settingsModal').classList.add('show')}
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+function closeAllModals(){document.querySelectorAll('.modal-overlay.show').forEach(m=>m.classList.remove('show'))}
+function saveSettings(){
+  saveConfig('source',selectedSource);saveConfig('cliTool',selectedCLI||'');
+  saveConfig('baseUrl',document.getElementById('cfgBaseUrl').value.trim());
+  saveConfig('apiKey',document.getElementById('cfgApiKey').value.trim());
+  saveConfig('models',document.getElementById('cfgModels').value.trim());
+  saveConfig('systemPrompt',document.getElementById('cfgSystemPrompt').value.trim());
+  saveConfig('temp',document.getElementById('cfgTemp').value);
+  saveConfig('maxHistory',document.getElementById('cfgMaxHistory').value);
+  closeModal('settingsModal');loadModels();updateWelcomeInfo();toast('设定已保存','success');
+}
+async function refreshDetection(){await detectBackend();loadConfigUI();toast('检测完成','success')}
+async function fetchModels(){
+  const bu=document.getElementById('cfgBaseUrl').value.trim(),ak=document.getElementById('cfgApiKey').value.trim();
+  if(!bu||!ak){toast('请先填写 URL 和 Key','error');return}
+  // 直连模式：尝试直接从 API 获取模型列表
+  if(selectedSource==='direct'||!API_BASE){
+    try{
+      const r=await fetch(bu.replace(/\/$/,'')+'/models',{
+        headers:{'Authorization':`Bearer ${ak}`}
+      });
+      if(r.ok){
+        const d=await r.json();
+        const models=(d.data||[]).map(m=>m.id).filter(Boolean);
+        if(models.length){document.getElementById('cfgModels').value=models.join(',');toast('获取到 '+models.length+' 个模型','success');return}
+      }
+    }catch{}
+    toast('直连模式下请手动输入模型名称','info');return;
+  }
+  try{
+    const r=await fetch(API_BASE+'/api/models',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({endpoint:bu,apiKey:ak})
+    });
+    const d=await r.json();
+    if(d.models?.length){document.getElementById('cfgModels').value=d.models.join(',');toast('获取到 '+d.models.length+' 个模型','success')}
+    else toast(d.error||'未获取到模型','error')
+  }catch(e){toast('获取失败: '+e.message,'error')}
+}
+
+// ═══════════════════════════════════════════════════════
+//  Models
+// ═══════════════════════════════════════════════════════
+function loadModels(){
+  const cfg=getConfig();const sel=document.getElementById('modelSelect');
+  sel.innerHTML='';let models=[];
+  if(cfg.models)models=cfg.models.split(',').map(m=>m.trim()).filter(Boolean);
+  if(!models.length){sel.innerHTML='<option value="">请先配置模型</option>';return}
+  models.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;sel.appendChild(o)});
+  if(cfg.currentModel&&models.includes(cfg.currentModel))sel.value=cfg.currentModel;
+  // Compare selects
+  ['compareModelA','compareModelB'].forEach(id=>{
+    const s=document.getElementById(id);if(!s)return;
+    s.innerHTML='';models.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;s.appendChild(o)});
+  });
+  if(models.length>1){document.getElementById('compareModelB').value=models[1]}
+  updateWelcomeInfo();
+}
+function onModelChange(){saveConfig('currentModel',document.getElementById('modelSelect').value);updateWelcomeInfo()}
+function onCompareModelChange(){/* compare model select changed - no-op, models read on send */}
+
+// ═══════════════════════════════════════════════════════
+//  Conversations
+// ═══════════════════════════════════════════════════════
+function loadConversations(){try{conversations=JSON.parse(localStorage.getItem('llm_conversations')||'{}')}catch{conversations={}}}
+function saveConversations(){localStorage.setItem('llm_conversations',JSON.stringify(conversations))}
+
+function renderConvList(){
+  const list=document.getElementById('convList');
+  const entries=Object.entries(conversations).sort((a,b)=>(b[1].updatedAt||0)-(a[1].updatedAt||0));
+  list.innerHTML='';
+  entries.forEach(([id,conv])=>{
+    const div=document.createElement('div');
+    div.className='conv-item'+(id===currentConvId?' active':'');
+    const icon=conv.mask?MASKS.find(m=>m.name===conv.mask)?.emoji||'💬':'💬';
+    div.innerHTML=`<span class="conv-icon">${icon}</span><span class="conv-title">${esc(conv.title||'新对话')}</span><button class="conv-delete" onclick="event.stopPropagation();deleteConversation('${id}')">✕</button>`;
+    div.onclick=()=>switchConversation(id);list.appendChild(div);
+  });
+}
+
+function newConversation(mask){
+  const id='conv_'+Date.now();
+  conversations[id]={title:'新对话',messages:[],createdAt:Date.now(),updatedAt:Date.now(),mask:mask?.name||'',forkFrom:null,branches:{}};
+  if(mask?.system){conversations[id].systemOverride=mask.system}
+  currentConvId=id;saveConversations();renderConvList();renderMessages();closeSidebarMobile();
+  if(mask)toast('已应用面具: '+mask.emoji+' '+mask.name,'success');
+}
+function switchConversation(id){currentConvId=id;renderConvList();renderMessages();closeSidebarMobile()}
+function deleteConversation(id){
+  delete conversations[id];
+  if(currentConvId===id){const k=Object.keys(conversations);currentConvId=k.length?k[k.length-1]:null}
+  saveConversations();renderConvList();renderMessages();
+}
+function clearCurrentChat(){
+  if(!currentConvId||!conversations[currentConvId])return;if(!confirm('确认清空当前对话？'))return;
+  conversations[currentConvId].messages=[];conversations[currentConvId].title='新对话';
+  saveConversations();renderConvList();renderMessages();
+}
+function filterConversations(q){q=q.toLowerCase();document.querySelectorAll('.conv-item').forEach(i=>{i.style.display=i.querySelector('.conv-title').textContent.toLowerCase().includes(q)?'':'none'})}
+
+// ═══════════════════════════════════════════════════════
+//  Masks
+// ═══════════════════════════════════════════════════════
+function showMasks(){
+  const grid=document.getElementById('maskGrid');
+  grid.innerHTML=MASKS.map(m=>`<div class="mask-card" onclick="applyMask(${MASKS.indexOf(m)})"><div class="mask-emoji">${m.emoji}</div><div class="mask-name">${m.name}</div><div class="mask-desc">${m.desc}</div></div>`).join('');
+  document.getElementById('maskModal').classList.add('show');
+}
+function applyMask(idx){const m=MASKS[idx];closeModal('maskModal');newConversation(m)}
+
+// ═══════════════════════════════════════════════════════
+//  Messages Rendering
+// ═══════════════════════════════════════════════════════
+function renderMessages(){
+  const container=document.getElementById('chatContainer');
+  const welcome=document.getElementById('welcomeScreen');
+  if(!currentConvId||!conversations[currentConvId]||!conversations[currentConvId].messages.length){
+    container.innerHTML='';container.appendChild(welcome);welcome.style.display='';return;
+  }
+  welcome.style.display='none';container.innerHTML='';
+  const conv=conversations[currentConvId];
+  conv.messages.forEach((msg,i)=>{
+    if(msg.role==='system')return;// skip system
+    container.appendChild(createMsgEl(msg,i,conv));
+  });
+  scrollBottom();
+}
+
+function createMsgEl(msg,index,conv){
+  const div=document.createElement('div');
+  div.className='message'+(msg.forked?' forked':'');
+  div.dataset.index=index;
+
+  const avatar=document.createElement('div');
+  avatar.className='msg-avatar';
+  avatar.textContent=msg.role==='user'?'U':'AI';
+
+  const content=document.createElement('div');
+  content.className='msg-content';
+
+  // Role line
+  const role=document.createElement('div');
+  role.className='msg-role';
+  role.textContent=msg.role==='user'?'你':'助手';
+  if(msg.model){const tag=document.createElement('span');tag.className='model-tag';tag.textContent=msg.model;role.appendChild(tag)}
+  content.appendChild(role);
+
+  // Fork badge
+  if(msg.forked){const fb=document.createElement('div');fb.className='fork-badge';fb.textContent='🌿 分支';content.appendChild(fb)}
+
+  // Thinking
+  if(msg.thinking){
+    const think=document.createElement('div');
+    think.className='thinking-block'+(msg.thinking.length<300?' open':'');
+    think.innerHTML=`<div class="thinking-header" onclick="this.parentElement.classList.toggle('open')"><span class="arrow">▶</span> 思考过程</div><div class="thinking-body">${esc(msg.thinking)}</div>`;
+    content.appendChild(think);
+  }
+
+  // Body (or edit area)
+  const body=document.createElement('div');
+  body.className='msg-body';
+  body.innerHTML=renderMd(msg.content);
+  content.appendChild(body);
+
+  // Code outputs
+  if(msg.outputs?.length){
+    msg.outputs.forEach(out=>{
+      const el=document.createElement('div');
+      el.className='code-output';
+      el.innerHTML=`<div class="code-output-header"><span>${out.lang||'output'}</span><span class="${out.exitCode===0?'status-ok':'status-err'}">${out.exitCode===0?'✅ 成功':'❌ 错误'} (${out.time}ms)</span></div><div class="code-output-body">${esc(out.stdout||out.stderr||'(无输出)')}</div>`;
+      content.appendChild(el);
+    });
+  }
+
+  // Actions
+  const actions=document.createElement('div');
+  actions.className='msg-actions';
+  actions.innerHTML=`
+    <button class="msg-action-btn" onclick="copyMsg(${index})">📋 复制</button>
+    ${msg.role==='assistant'?`<button class="msg-action-btn" onclick="regenerateFrom(${index})">🔄 重新生成</button>`:''}
+    <button class="msg-action-btn" onclick="editMessage(${index})">✏️ 编辑</button>
+    <button class="msg-action-btn" onclick="forkFrom(${index})">🌿 分支</button>
+    <button class="msg-action-btn" onclick="viewInArtifacts(${index})">🖼️ Artifacts</button>
+    <button class="msg-action-btn danger" onclick="deleteMessage(${index})">🗑️</button>
+  `;
+  content.appendChild(actions);
+
+  div.appendChild(avatar);div.appendChild(content);
+  return div;
+}
+
+// ═══════════════════════════════════════════════════════
+//  Message Actions
+// ═══════════════════════════════════════════════════════
+function copyMsg(i){navigator.clipboard.writeText(conversations[currentConvId].messages[i].content);toast('已复制','success')}
+
+function editMessage(i){
+  const conv=conversations[currentConvId];const msg=conv.messages[i];
+  const msgEl=document.querySelector(`.message[data-index="${i}"]`);
+  if(!msgEl)return;
+  const body=msgEl.querySelector('.msg-body');
+  if(body.querySelector('.msg-edit-area')){body.innerHTML=renderMd(msg.content);return}// toggle off
+  body.innerHTML='';
+  const ta=document.createElement('textarea');
+  ta.className='msg-edit-area';ta.value=msg.content;
+  body.appendChild(ta);
+  const acts=document.createElement('div');acts.className='msg-edit-actions';
+  acts.innerHTML='<button class="btn btn-primary btn-sm" onclick="saveEdit('+i+')">保存</button><button class="btn btn-sm" onclick="renderMessages()">取消</button>';
+  body.appendChild(acts);
+  ta.focus();
+}
+
+function saveEdit(i){
+  const conv=conversations[currentConvId];
+  const ta=document.querySelector(`.message[data-index="${i}"] .msg-edit-area`);
+  if(!ta)return;
+  conv.messages[i].content=ta.value;
+  // Remove all messages after this one (invalidate responses)
+  conv.messages.splice(i+1);
+  conv.updatedAt=Date.now();saveConversations();renderMessages();
+  toast('已编辑，后续消息已移除','info');
+}
+
+function deleteMessage(i){
+  const conv=conversations[currentConvId];
+  conv.messages.splice(i,1);conv.updatedAt=Date.now();
+  saveConversations();renderMessages();
+}
+
+function regenerateFrom(i){
+  const conv=conversations[currentConvId];
+  // Remove this and all subsequent messages
+  const userMsg=conv.messages.slice(0,i).reverse().find(m=>m.role==='user');
+  conv.messages.splice(i);
+  saveConversations();renderMessages();
+  if(userMsg)sendMessage(userMsg.content);
+}
+
+function regenerateLast(){
+  const conv=conversations[currentConvId];
+  if(!conv?.messages.length)return;
+  const lastAi=conv.messages.length-1;
+  if(conv.messages[lastAi].role==='assistant'){regenerateFrom(lastAi)}
+}
+
+// ═══════════════════════════════════════════════════════
+//  Fork (对话分支)
+// ═══════════════════════════════════════════════════════
+function forkFrom(i){
+  const conv=conversations[currentConvId];
+  const newId='fork_'+Date.now();
+  const forkedMessages=JSON.parse(JSON.stringify(conv.messages.slice(0,i+1)));
+  forkedMessages.push({role:'assistant',content:'[分支点]',thinking:'',forked:true});
+  conversations[newId]={
+    title:'🌿 '+conv.title,
+    messages:forkedMessages,
+    createdAt:Date.now(),updatedAt:Date.now(),
+    forkFrom:currentConvId,forkPoint:i,
+    mask:conv.mask
+  };
+  currentConvId=newId;saveConversations();renderConvList();renderMessages();
+  toast('已创建分支','success');
+}
+
+// ═══════════════════════════════════════════════════════
+//  Artifacts
+// ═══════════════════════════════════════════════════════
+let artifactsOpen=false;
+function toggleArtifacts(){
+  artifactsOpen=!artifactsOpen;
+  document.getElementById('artifactsPanel').classList.toggle('open',artifactsOpen);
+  document.getElementById('chatContainer').classList.toggle('with-artifacts',artifactsOpen);
+  document.getElementById('artifactsBtn').classList.toggle('active',artifactsOpen);
+}
+
+function viewInArtifacts(i){
+  const msg=conversations[currentConvId].messages[i];
+  if(!msg)return;
+  // Extract code blocks
+  const codeBlocks=[];
+  const regex=/```(\w*)\n([\s\S]*?)```/g;
+  let match;
+  while((match=regex.exec(msg.content))!==null){codeBlocks.push({lang:match[1],code:match[2]})}
+
+  if(codeBlocks.length){
+    // Find HTML or JS blocks
+    const htmlBlock=codeBlocks.find(b=>b.lang==='html')||codeBlocks.find(b=>b.lang==='javascript')||codeBlocks[0];
+    const frame=document.getElementById('artifactsFrame');
+    const codeEl=document.getElementById('artifactsCode');
+    codeEl.textContent=htmlBlock.code;
+    if(htmlBlock.lang==='html'){
+      frame.srcdoc=htmlBlock.code;
+      codeEl.style.display='none';frame.style.display='';
+      document.querySelectorAll('.artifacts-tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.artifacts-tab')[0].classList.add('active');
+    }else{
+      codeEl.style.display='';frame.style.display='none';
+      document.querySelectorAll('.artifacts-tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.artifacts-tab')[1].classList.add('active');
+    }
+    if(!artifactsOpen)toggleArtifacts();
+  }else{
+    // Show full message as text
+    document.getElementById('artifactsCode').textContent=msg.content;
+    document.getElementById('artifactsCode').style.display='';
+    document.getElementById('artifactsFrame').style.display='none';
+    if(!artifactsOpen)toggleArtifacts();
+  }
+}
+
+function switchArtifactTab(tab,btn){
+  document.querySelectorAll('.artifacts-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('artifactsFrame').style.display=tab==='preview'?'':'none';
+  document.getElementById('artifactsCode').style.display=tab==='code'?'':'none';
+}
+
+// ═══════════════════════════════════════════════════════
+//  Code Interpreter (sandboxed execution)
+// ═══════════════════════════════════════════════════════
+function addCodeRunButtons(){
+  document.querySelectorAll('.msg-body pre code').forEach(block=>{
+    const pre=block.parentElement;
+    if(pre.querySelector('.code-run'))return;
+    const lang=block.className.replace('lang-','');
+    if(['javascript','js',''].includes(lang)){
+      const btn=document.createElement('button');
+      btn.className='code-run';btn.textContent='▶ 运行';
+      btn.onclick=()=>runCode(block.textContent,'javascript');
+      pre.appendChild(btn);
+    }
+  });
+}
+
+function runCode(code,lang){
+  if(lang==='javascript'){
+    const outputs=[];
+    const origLog=console.log;
+    const origErr=console.error;
+    console.log=(...args)=>{outputs.push(args.map(a=>typeof a==='object'?JSON.stringify(a,null,2):String(a)).join(' '))};
+    console.error=console.log;
+    const t0=performance.now();
+    try{
+      const result=eval(code);
+      const time=Math.round(performance.now()-t0);
+      if(result!==undefined)outputs.push(String(result));
+      addCodeOutput(outputs.join('\n'),'',0,time,'javascript');
+    }catch(e){
+      const time=Math.round(performance.now()-t0);
+      addCodeOutput('',e.message,1,time,'javascript');
+    }
+    console.log=origLog;console.error=origErr;
+  }
+}
+
+function addCodeOutput(stdout,stderr,exitCode,time,lang){
+  const conv=conversations[currentConvId];
+  if(!conv?.messages.length)return;
+  const lastMsg=conv.messages[conv.messages.length-1];
+  if(!lastMsg.outputs)lastMsg.outputs=[];
+  lastMsg.outputs.push({stdout,stderr,exitCode,time,lang});
+  saveConversations();renderMessages();
+}
+
+// ═══════════════════════════════════════════════════════
+//  Compare Mode (多模型对比)
+// ═══════════════════════════════════════════════════════
+function toggleCompare(){
+  compareMode=!compareMode;
+  document.getElementById('compareContainer').style.display=compareMode?'flex':'none';
+  document.getElementById('chatArea').style.display=compareMode?'none':'';
+  document.getElementById('inputArea').style.display=compareMode?'none':'';
+  document.getElementById('compareBtn').classList.toggle('active',compareMode);
+  if(compareMode){
+    document.getElementById('chatContainer').classList.remove('with-artifacts');
+    if(artifactsOpen)toggleArtifacts();
+  }
+}
+
+async function sendCompare(){
+  const input=document.getElementById('userInput');
+  const content=input.value.trim();
+  if(!content||isStreaming)return;
+  const cfg=getConfig();
+  const modelA=document.getElementById('compareModelA').value;
+  const modelB=document.getElementById('compareModelB').value;
+  if(!modelA||!modelB){toast('请选择两个模型','error');return}
+
+  input.value='';autoResize(input);
+
+  const apiMessages=cfg.systemPrompt?[{role:'system',content:cfg.systemPrompt}]:[];
+  apiMessages.push({role:'user',content});
+
+  isStreaming=true;updateInputState();
+  abortController=new AbortController();
+
+  const paneA=document.getElementById('compareChatA');
+  const paneB=document.getElementById('compareChatB');
+
+  // Add user messages
+  paneA.innerHTML+=`<div class="message user"><div class="msg-avatar">U</div><div class="msg-content"><div class="msg-body">${renderMd(content)}</div></div></div>`;
+  paneB.innerHTML+=`<div class="message user"><div class="msg-avatar">U</div><div class="msg-content"><div class="msg-body">${renderMd(content)}</div></div></div>`;
+
+  // Add placeholders
+  paneA.innerHTML+=`<div class="message assistant" id="compareMsgA"><div class="msg-avatar">AI</div><div class="msg-content"><div class="msg-role">${modelA}</div><div class="msg-body streaming-cursor">等待响应...</div></div></div>`;
+  paneB.innerHTML+=`<div class="message assistant" id="compareMsgB"><div class="msg-avatar">AI</div><div class="msg-content"><div class="msg-role">${modelB}</div><div class="msg-body streaming-cursor">等待响应...</div></div></div>`;
+
+  const bodyA=paneA.querySelector('#compareMsgA .msg-body');
+  const bodyB=paneB.querySelector('#compareMsgB .msg-body');
+
+  // Fire both requests
+  const results=await Promise.allSettled([
+    streamModel(cfg,modelA,apiMessages,bodyA,abortController.signal),
+    streamModel(cfg,modelB,apiMessages,bodyB,abortController.signal),
+  ]);
+
+  bodyA.classList.remove('streaming-cursor');
+  bodyB.classList.remove('streaming-cursor');
+  isStreaming=false;abortController=null;updateInputState();
+  notifyCompletion({title:'多模型对比'});
+}
+
+async function streamModel(cfg,model,messages,bodyEl,signal){
+  let resp;
+  if(selectedSource==='direct'||!API_BASE){
+    resp=await fetch(cfg.baseUrl.replace(/\/$/,'')+'/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${cfg.apiKey}`},
+      body:JSON.stringify({model,messages,stream:true,temperature:cfg.temperature,max_tokens:4096}),
+      signal
+    });
+  }else{
+    resp=await fetch(API_BASE+'/api/chat',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({endpoint:cfg.baseUrl,apiKey:cfg.apiKey,model,messages,temperature:cfg.temperature}),
+      signal
+    });
+  }
+  if(!resp.ok)throw new Error('API Error');
+  const reader=resp.body.getReader();const decoder=new TextDecoder();
+  let buf='',content='';
+  while(true){
+    const{done,value}=await reader.read();if(done)break;
+    buf+=decoder.decode(value,{stream:true});
+    const lines=buf.split('\n');buf=lines.pop();
+    for(const line of lines){
+      if(!line.trim().startsWith('data:'))continue;
+      const d=line.trim().slice(5).trim();if(d==='[DONE]')continue;
+      try{const j=JSON.parse(d);const c=j.choices?.[0]?.delta?.content;if(c){content+=c;
+        bodyEl.innerHTML=renderMd(content)}}catch{}
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Send Message (main)
+// ═══════════════════════════════════════════════════════
+async function sendMessage(text){
+  if(compareMode){sendCompare();return}
+  const input=document.getElementById('userInput');
+  const content=text||input.value.trim();
+  if(!content||isStreaming)return;
+  const cfg=getConfig();
+  const model=document.getElementById('modelSelect').value;
+  if(!model){toast('请先选择模型','error');return}
+  if(!currentConvId)newConversation();
+  const conv=conversations[currentConvId];
+  conv.messages.push({role:'user',content});
+  if(conv.messages.length===1)conv.title=content.slice(0,40)+(content.length>40?'...':'');
+  conv.updatedAt=Date.now();saveConversations();renderConvList();
+  input.value='';autoResize(input);hideWelcome();
+
+  conv.messages.push({role:'assistant',content:'',thinking:'',model});
+  const aiIdx=conv.messages.length-1;
+  const container=document.getElementById('chatContainer');
+  const msgEl=createMsgEl(conv.messages[aiIdx],aiIdx,conv);
+  container.appendChild(msgEl);
+  const bodyEl=msgEl.querySelector('.msg-body');
+  bodyEl.classList.add('streaming-cursor');scrollBottom();
+
+  const apiMessages=[];
+  const sysOverride=conv.systemOverride;
+  if(sysOverride)apiMessages.push({role:'system',content:sysOverride});
+  else if(cfg.systemPrompt)apiMessages.push({role:'system',content:cfg.systemPrompt});
+  conv.messages.slice(0,-1).filter(m=>m.role!=='system'||!sysOverride).slice(-cfg.maxHistory*2).forEach(m=>apiMessages.push({role:m.role,content:m.content}));
+
+  isStreaming=true;updateInputState();
+  abortController=new AbortController();
+
+  try{
+    const useCLI=selectedSource==='backend'&&selectedCLI&&detectedTools.find(t=>t.id===selectedCLI);
+    let resp;
+    if(selectedSource==='direct'||!API_BASE){
+      // 直连模式：浏览器直接调用 LLM API
+      if(!cfg.baseUrl||!cfg.apiKey){throw new Error('请先在设定中填写 API Base URL 和 API Key')}
+      resp=await fetch(cfg.baseUrl.replace(/\/$/,'')+'/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${cfg.apiKey}`},
+        body:JSON.stringify({model,messages:apiMessages,stream:true,temperature:cfg.temperature,max_tokens:4096}),
+        signal:abortController.signal
+      });
+    }else{
+      // 后端代理模式
+      resp=await fetch(API_BASE+'/api/chat',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({useCLI:useCLI?selectedCLI:null,endpoint:cfg.baseUrl,apiKey:cfg.apiKey,model,messages:apiMessages,temperature:cfg.temperature}),
+        signal:abortController.signal
+      });
+    }
+    if(!resp.ok){const e=await resp.json().catch(()=>({error:resp.statusText}));throw new Error(e.error||'API 错误')}
+    const ct=resp.headers.get('content-type')||'';
+    if(ct.includes('application/json')){
+      const data=await resp.json();if(data.error)throw new Error(data.error);
+      conv.messages[aiIdx].content=data.content||'';conv.messages[aiIdx].thinking=data.reasoning||'';
+      bodyEl.classList.remove('streaming-cursor');bodyEl.innerHTML=renderMd(data.content||'');
+      if(data.reasoning){const te=msgEl.querySelector('.thinking-block');if(te)te.querySelector('.thinking-body').textContent=data.reasoning}
+      // Update tokens
+      if(data.usage){sessionTokens.in+=data.usage.prompt_tokens||0;sessionTokens.out+=data.usage.completion_tokens||0;updateTokenDisplay()}
+    }else{
+      await processStream(resp,conv,aiIdx,bodyEl);
+    }
+  }catch(e){
+    bodyEl.classList.remove('streaming-cursor');
+    if(e.name==='AbortError')bodyEl.innerHTML=renderMd(conv.messages[aiIdx].content||'*[已停止]*');
+    else{bodyEl.innerHTML=`<span style="color:var(--red)">❌ ${esc(e.message)}</span>`;conv.messages[aiIdx].content=''}
+  }finally{
+    isStreaming=false;abortController=null;conv.updatedAt=Date.now();saveConversations();
+    updateInputState();addCodeRunButtons();document.getElementById('userInput').focus();
+    // 完成通知（仅成功生成内容时）
+    if(conv.messages[aiIdx]?.content&&!conv.messages[aiIdx].content.startsWith('❌')){
+      notifyCompletion(conv);
+    }
+  }
+}
+
+async function processStream(resp,conv,aiIdx,bodyEl){
+  const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';
+  while(true){
+    const{done,value}=await reader.read();if(done)break;
+    buf+=decoder.decode(value,{stream:true});
+    const lines=buf.split('\n');buf=lines.pop();
+    for(const line of lines){
+      const t=line.trim();if(!t.startsWith('data:'))continue;
+      const d=t.slice(5).trim();if(d==='[DONE]')continue;
+      try{
+        const j=JSON.parse(d);const delta=j.choices?.[0]?.delta;if(!delta)continue;
+        if(delta.thinking||delta.reasoning_content){
+          conv.messages[aiIdx].thinking+=(delta.thinking||delta.reasoning_content);
+          // 实时更新思考过程 DOM
+          let thinkEl=msgEl.querySelector('.thinking-block');
+          if(!thinkEl){
+            thinkEl=document.createElement('div');
+            thinkEl.className='thinking-block open';
+            thinkEl.innerHTML='<div class="thinking-header" onclick="this.parentElement.classList.toggle(\'open\')"><span class="arrow">▶</span> 思考过程</div><div class="thinking-body"></div>';
+            bodyEl.parentElement.insertBefore(thinkEl,bodyEl);
+          }
+          thinkEl.querySelector('.thinking-body').textContent=conv.messages[aiIdx].thinking;
+          scrollBottom();
+        }
+        if(delta.content){conv.messages[aiIdx].content+=delta.content;bodyEl.innerHTML=renderMd(conv.messages[aiIdx].content);scrollBottom()}
+        if(j.usage){sessionTokens.in+=j.usage.prompt_tokens||0;sessionTokens.out+=j.usage.completion_tokens||0;updateTokenDisplay()}
+      }catch{}
+    }
+  }
+  bodyEl.classList.remove('streaming-cursor');bodyEl.innerHTML=renderMd(conv.messages[aiIdx].content);
+}
+
+function stopGeneration(){if(abortController)abortController.abort()}
+function useSuggestion(text){document.getElementById('userInput').value=text;document.getElementById('userInput').focus()}
+
+// ═══════════════════════════════════════════════════════
+//  Token Stats
+// ═══════════════════════════════════════════════════════
+function updateTokenDisplay(){
+  const el=document.getElementById('tokenDisplay');
+  if(sessionTokens.in||sessionTokens.out){
+    el.style.display='flex';
+    document.getElementById('tokenIn').textContent=sessionTokens.in.toLocaleString();
+    document.getElementById('tokenOut').textContent=sessionTokens.out.toLocaleString();
+  }
+}
+function showTokenStats(){
+  const body=document.getElementById('tokenStatsBody');
+  const total=sessionTokens.in+sessionTokens.out;
+  body.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;text-align:center;margin-bottom:20px">
+      <div style="padding:16px;border-radius:12px;background:var(--bg3)"><div style="font-size:2rem;font-weight:800;color:var(--accent2)">${sessionTokens.in.toLocaleString()}</div><div style="font-size:.82rem;color:var(--text2)">输入 Tokens</div></div>
+      <div style="padding:16px;border-radius:12px;background:var(--bg3)"><div style="font-size:2rem;font-weight:800;color:var(--green)">${sessionTokens.out.toLocaleString()}</div><div style="font-size:.82rem;color:var(--text2)">输出 Tokens</div></div>
+      <div style="padding:16px;border-radius:12px;background:var(--bg3)"><div style="font-size:2rem;font-weight:800;color:var(--orange)">${total.toLocaleString()}</div><div style="font-size:.82rem;color:var(--text2)">总 Tokens</div></div>
+    </div>
+    <div style="text-align:center"><button class="btn btn-sm" onclick="sessionTokens={in:0,out:0,history:[]};updateTokenDisplay();closeModal('tokenModal')">重置统计</button></div>
+  `;
+  document.getElementById('tokenModal').classList.add('show');
+}
+
+// ═══════════════════════════════════════════════════════
+//  Import / Export
+// ═══════════════════════════════════════════════════════
+function exportAll(){
+  const data=JSON.stringify(conversations,null,2);
+  const blob=new Blob([data],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='llm-chat-export-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();toast('已导出','success');
+}
+function exportCurrent(){
+  if(!currentConvId)return;
+  const conv=conversations[currentConvId];
+  const data=JSON.stringify(conv,null,2);
+  const blob=new Blob([data],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=(conv.title||'对话')+'.json';a.click();toast('已导出','success');
+}
+function importConversations(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(reader.result);
+      if(data.messages){// single conversation
+        const id='import_'+Date.now();conversations[id]=data;conversations[id].updatedAt=Date.now();
+      }else{// multiple
+        Object.assign(conversations,data);
+      }
+      saveConversations();renderConvList();toast('导入成功','success');
+    }catch(err){toast('导入失败: '+err.message,'error')}
+  };
+  reader.readAsText(file);e.target.value='';
+}
+
+// ═══════════════════════════════════════════════════════
+//  File Attachment
+// ═══════════════════════════════════════════════════════
+function attachFile(){
+  const input=document.createElement('input');input.type='file';
+  input.accept='.txt,.md,.json,.csv,.py,.js,.ts,.html,.css,.java,.go,.rs,.c,.cpp,.h';
+  input.onchange=()=>{
+    const file=input.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const content=reader.result;
+      const ta=document.getElementById('userInput');
+      ta.value+=`\n\n📎 文件: ${file.name}\n\`\`\`\n${content}\n\`\`\`\n`;
+      autoResize(ta);ta.focus();
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ═══════════════════════════════════════════════════════
+//  Keyboard Shortcuts
+// ═══════════════════════════════════════════════════════
+function showShortcuts(){
+  const list=document.getElementById('shortcutList');
+  list.innerHTML=SHORTCUTS.map(s=>`<div class="shortcut-item"><span class="desc">${s.desc}</span><span class="keys">${s.keys.map(k=>`<kbd>${k}</kbd>`).join(' + ')}</span></div>`).join('');
+  document.getElementById('shortcutsModal').classList.add('show');
+}
+
+document.addEventListener('keydown',e=>{
+  // Ctrl+N: new conversation
+  if(e.ctrlKey&&e.key==='n'){e.preventDefault();newConversation();return}
+  // Ctrl+M: compare mode
+  if(e.ctrlKey&&e.key==='m'){e.preventDefault();toggleCompare();return}
+  // Ctrl+E: export
+  if(e.ctrlKey&&e.key==='e'){e.preventDefault();exportCurrent();return}
+  // Ctrl+/: shortcuts
+  if(e.ctrlKey&&e.key==='/'){e.preventDefault();showShortcuts();return}
+  // Escape
+  if(e.key==='Escape'){closeAllModals();if(isStreaming)stopGeneration();return}
+  // Ctrl+1-9: switch conversation
+  if(e.ctrlKey&&e.key>='1'&&e.key<='9'){
+    e.preventDefault();
+    const idx=parseInt(e.key)-1;
+    const keys=Object.keys(conversations).sort((a,b)=>(conversations[b].updatedAt||0)-(conversations[a].updatedAt||0));
+    if(keys[idx])switchConversation(keys[idx]);
+    return;
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+//  Markdown
+// ═══════════════════════════════════════════════════════
+function renderMd(text){
+  if(!text)return'';
+  let h=esc(text);
+  h=h.replace(/```(\w*)\n([\s\S]*?)```/g,(_,l,c)=>{
+    const runBtn=['javascript','js',''].includes(l)?'<button class="code-run" onclick="runCode(this.parentElement.querySelector(\'code\').textContent,\'javascript\')">▶ 运行</button>':'';
+    return`<pre>${runBtn}<button class="code-copy" onclick="navigator.clipboard.writeText(this.parentElement.querySelector(\'code\').textContent)">📋</button><code class="lang-${l}">${c}</code></pre>`;
+  });
+  h=h.replace(/`([^`]+)`/g,'<code>$1</code>');
+  h=h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  h=h.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  h=h.replace(/^#### (.+)$/gm,'<h4>$1</h4>');
+  h=h.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+  h=h.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  h=h.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  h=h.replace(/^&gt; (.+)$/gm,'<blockquote>$1</blockquote>');
+  h=h.replace(/^---$/gm,'<hr>');
+  h=h.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_, text, href)=>{
+    // 安全过滤：只允许 http/https 协议
+    const safeHref = /^(https?:\/\/)/i.test(href) ? href : '#';
+    return`<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  });
+  h=h.replace(/^- (.+)$/gm,'<li>$1</li>');
+  h=h.replace(/(<li>.*<\/li>\n?)+/g,'<ul>$&</ul>');
+  h=h.replace(/^\d+\. (.+)$/gm,'<oli>$1</oli>');
+  h=h.replace(/(<oli>.*<\/oli>\n?)+/g,(m)=>'<ol>'+m.replace(/oli>/g,'li>')+'</ol>');
+  h=h.replace(/^\|(.+)\|$/gm,(m,row)=>{
+    if(/^[\s\-|:]+$/.test(row))return'';
+    return'<tr>'+row.split('|').map(c=>`<td>${c.trim()}</td>`).join('')+'</tr>';
+  });
+  h=h.replace(/(<tr>.*<\/tr>\n?)+/g,'<table>$&</table>');
+  h=h.replace(/\n\n/g,'</p><p>');
+  h=h.replace(/\n/g,'<br>');
+  if(!h.startsWith('<'))h='<p>'+h+'</p>';
+  return h;
+}
+function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML}
+
+// ═══════════════════════════════════════════════════════
+//  UI Helpers
+// ═══════════════════════════════════════════════════════
+function scrollBottom(){const a=document.getElementById('chatArea');requestAnimationFrame(()=>{a.scrollTop=a.scrollHeight})}
+function hideWelcome(){const w=document.getElementById('welcomeScreen');if(w)w.style.display='none'}
+function autoResize(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,200)+'px'}
+function updateInputState(){
+  document.getElementById('sendBtn').style.display=isStreaming?'none':'flex';
+  document.getElementById('stopBtn').style.display=isStreaming?'flex':'none';
+  document.getElementById('userInput').disabled=isStreaming;
+}
+function onInputKeydown(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebarMask').classList.toggle('show')}
+function closeSidebarMobile(){if(window.innerWidth<=768){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarMask').classList.remove('show')}}
+function toast(msg,type='success'){const el=document.createElement('div');el.className='toast '+type;el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),2500)}
+
+// ═══════════════════════════════════════════════════════
+//  Completion Notification (完成提示 + 音效)
+// ═══════════════════════════════════════════════════════
+let audioCtx=null;
+function getAudioCtx(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx}
+
+function playNotificationSound(){
+  if(localStorage.getItem('llm_soundOff")==='1')return;
+  try{
+    const ctx=getAudioCtx();
+    // 双音提示：高音 → 低音（类似 macOS 通知音）
+    const notes=[{freq:880,dur:0.12,vol:0.3,delay:0},{freq:660,dur:0.18,vol:0.25,delay:0.1}];
+    notes.forEach(n=>{
+      const osc=ctx.createOscillator();
+      const gain=ctx.createGain();
+      osc.type='sine';osc.frequency.value=n.freq;
+      gain.gain.setValueAtTime(0,ctx.currentTime+n.delay);
+      gain.gain.linearRampToValueAtTime(n.vol,ctx.currentTime+n.delay+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+n.delay+n.dur);
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.start(ctx.currentTime+n.delay);
+      osc.stop(ctx.currentTime+n.delay+n.dur+0.05);
+    });
+  }catch(e){/* 静默失败 */}
+}
+
+function notifyCompletion(conv){
+  const soundEnabled=localStorage.getItem('llm_soundOff')!=='1';
+  const notifyEnabled=localStorage.getItem('llm_notifyOff')!=='1';
+
+  // 播放音效
+  if(soundEnabled)playNotificationSound();
+
+  // 浏览器桌面通知
+  if(notifyEnabled&&Notification.permission==='granted'){
+    const title=conv?.title||'LLM Chat';
+    const body='回复已完成';
+    try{new Notification(title,{body,icon:'💬',silent:true})}catch{}
+  }
+
+  // 页面内完成提示（带进度条的 toast）
+  if(notifyEnabled){
+    const el=document.createElement('div');
+    el.className='toast success';
+    el.innerHTML='✅ 回复已完成';
+    el.style.cssText='animation:toastIn .3s ease forwards';
+    document.body.appendChild(el);
+    setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .5s';setTimeout(()=>el.remove(),500)},3000);
+  }
+}
+
+// 请求通知权限
+function requestNotifyPermission(){
+  if('Notification' in window&&Notification.permission==='default'){
+    Notification.requestPermission();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Init
+// ═══════════════════════════════════════════════════════
+
+// 通知开关
+function toggleSound(){
+  const off=localStorage.getItem('llm_soundOff')==='1';
+  localStorage.setItem('llm_soundOff',off?'0':'1');
+  const el=document.getElementById('soundToggle');
+  if(el)el.classList.toggle('selected',off);// off=1 → now enabled → selected
+  if(off)playNotificationSound();// 播放一次预览
+}
+function toggleNotify(){
+  const off=localStorage.getItem('llm_notifyOff')==='1';
+  localStorage.setItem('llm_notifyOff',off?'0':'1');
+  const el=document.getElementById('notifyToggle');
+  if(el)el.classList.toggle('selected',off);
+  if(off)requestNotifyPermission();
+}
+
+async function init(){
+  loadConversations();
+  selectedSource=getConfig().source;selectedCLI=getConfig().cliTool;
+  await detectBackend();loadModels();
+  const keys=Object.keys(conversations);
+  if(keys.length)currentConvId=keys.sort((a,b)=>(conversations[b].updatedAt||0)-(conversations[a].updatedAt||0))[0];
+  renderConvList();renderMessages();
+  document.getElementById('userInput').focus();
+  // 请求通知权限（首次访问）
+  requestNotifyPermission();
+}
+init();
+</script>
+</body>
+</html>
