@@ -402,11 +402,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Noto
       <div class="form-group">
         <label>通知设置</label>
         <div class="tool-cards">
-          <div class="tool-card${localStorage.getItem('llm_soundOff')==='1'?'':' selected'}" id="soundToggle" onclick="toggleSound()">
+          <div class="tool-card selected" id="soundToggle" onclick="toggleSound()">
             <div class="tool-icon">🔊</div>
             <div><div class="tool-name">完成提示音</div><div class="tool-desc">回复生成完毕时播放提示音</div></div>
           </div>
-          <div class="tool-card${localStorage.getItem('llm_notifyOff')==='1'?'':' selected'}" id="notifyToggle" onclick="toggleNotify()">
+          <div class="tool-card selected" id="notifyToggle" onclick="toggleNotify()">
             <div class="tool-icon">🔔</div>
             <div><div class="tool-name">桌面通知</div><div class="tool-desc">回复完成时弹出系统通知（需授权）</div></div>
           </div>
@@ -598,6 +598,11 @@ function loadConfigUI(){
   document.getElementById('cfgTemp').value=cfg.temperature;
   document.getElementById('cfgMaxHistory').value=cfg.maxHistory;
   document.querySelectorAll('#sourceCards .tool-card').forEach(c=>c.classList.toggle('selected',c.dataset.source===selectedSource));
+  // 通知开关状态
+  const soundEl=document.getElementById('soundToggle');
+  if(soundEl)soundEl.classList.toggle('selected',localStorage.getItem('llm_soundOff')!=='1');
+  const notifyEl=document.getElementById('notifyToggle');
+  if(notifyEl)notifyEl.classList.toggle('selected',localStorage.getItem('llm_notifyOff')!=='1');
   renderCLISection();updateSourceVisibility();
 }
 function selectSource(s){selectedSource=s;saveConfig('source',s);document.querySelectorAll('#sourceCards .tool-card').forEach(c=>c.classList.toggle('selected',c.dataset.source===s));updateSourceVisibility()}
@@ -1401,7 +1406,7 @@ let audioCtx=null;
 function getAudioCtx(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx}
 
 function playNotificationSound(){
-  if(localStorage.getItem('llm_soundOff")==='1')return;
+  if(localStorage.getItem('llm_soundOff')==='1')return;
   try{
     const ctx=getAudioCtx();
     // 双音提示：高音 → 低音（类似 macOS 通知音）
