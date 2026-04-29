@@ -389,9 +389,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Noto
         <div class="form-group"><label>本地工具</label><div class="tool-cards" id="cliToolCards"></div></div>
       </div>
       <div id="apiConfigSection">
-        <div class="form-group"><label>API Base URL</label><div class="hint">OpenAI 兼容端点，如 https://api.openai.com/v1 或 https://api.siliconflow.cn/v1</div><input type="text" id="cfgBaseUrl" placeholder="https://api.openai.com/v1"></div>
+        <div class="form-group">
+          <label>⚡ 快速选择 API 服务商</label>
+          <div class="hint">点击自动填入 URL，然后填写 API Key 即可</div>
+          <div class="tool-cards" id="providerCards">
+            <div class="tool-card" data-url="https://api.deepseek.com/v1" data-models="deepseek-chat,deepseek-reasoner" onclick="quickProvider(this)">
+              <div class="tool-icon">🔮</div>
+              <div><div class="tool-name">DeepSeek</div><div class="tool-desc">deepseek-chat · deepseek-reasoner</div></div>
+            </div>
+            <div class="tool-card" data-url="https://api.siliconflow.cn/v1" data-models="Qwen/Qwen2.5-7B-Instruct,deepseek-ai/DeepSeek-V3" onclick="quickProvider(this)">
+              <div class="tool-icon">🌊</div>
+              <div><div class="tool-name">SiliconFlow</div><div class="tool-desc">多模型聚合平台</div></div>
+            </div>
+            <div class="tool-card" data-url="https://api.openai.com/v1" data-models="gpt-4o,gpt-4o-mini" onclick="quickProvider(this)">
+              <div class="tool-icon">🤖</div>
+              <div><div class="tool-name">OpenAI</div><div class="tool-desc">gpt-4o · gpt-4o-mini</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="form-group"><label>API Base URL</label><div class="hint">OpenAI 兼容端点，如 https://api.openai.com/v1</div><input type="text" id="cfgBaseUrl" placeholder="https://api.deepseek.com/v1"></div>
         <div class="form-group"><label>API Key</label><div class="hint">数据仅存储在本地浏览器，不会上传到任何服务器</div><input type="password" id="cfgApiKey" placeholder="sk-..."></div>
-        <div class="form-group"><label>CORS 代理 <span style="color:var(--text3);font-weight:normal">(可选)</span></label><div class="hint">如果 API 不支持浏览器直连，填入代理地址。留空则直连。</div><input type="text" id="cfgCorsProxy" placeholder="https://your-proxy.workers.dev 或留空"></div>
+        <div class="form-group">
+          <label>CORS 代理 <span style="color:var(--text3);font-weight:normal">(可选)</span></label>
+          <div class="hint">如果 API 不支持浏览器直连，填入代理地址</div>
+          <input type="text" id="cfgCorsProxy" placeholder="https://your-proxy.workers.dev 或留空">
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="showCorsGuide()" style="font-size:.78rem">📖 部署免费 CORS 代理</button>
+          </div>
+        </div>
       </div>
       <div class="form-group"><label>模型列表</label><div class="hint">逗号分隔，或点"获取模型"自动拉取</div><input type="text" id="cfgModels" placeholder="gpt-4o,gpt-4o-mini"></div>
       <div class="form-group"><label>系统提示词</label><input type="text" id="cfgSystemPrompt" placeholder="You are a helpful assistant."></div>
@@ -449,6 +474,49 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Noto
   <div class="modal">
     <div class="modal-header"><h3>📊 Token 统计</h3><button class="modal-close" onclick="closeModal('tokenModal')">✕</button></div>
     <div class="modal-body" id="tokenStatsBody"></div>
+  </div>
+</div>
+
+<!-- CORS Guide Modal -->
+<div class="modal-overlay" id="corsGuideModal">
+  <div class="modal" style="width:680px">
+    <div class="modal-header"><h3>📖 免费部署 CORS 代理</h3><button class="modal-close" onclick="closeModal('corsGuideModal')">✕</button></div>
+    <div class="modal-body" style="font-size:.85rem;color:var(--text2);line-height:1.7">
+      <p style="margin-bottom:12px">使用 <b>Cloudflare Workers</b> 免费部署 CORS 代理（每月 10 万次请求免费）：</p>
+      <ol style="padding-left:20px;margin-bottom:16px">
+        <li>打开 <a href="https://dash.cloudflare.com" target="_blank" style="color:var(--accent)">dash.cloudflare.com</a> → 注册/登录</li>
+        <li>左侧菜单 → <b>Workers & Pages</b> → <b>Create</b> → <b>Create Worker</b></li>
+        <li>起个名字（如 <code>cors-proxy</code>）→ <b>Deploy</b></li>
+        <li>点击 <b>Edit Code</b> → 清空默认代码 → 粘贴下方代码 → <b>Save and Deploy</b></li>
+        <li>复制部署后的 URL（如 <code>https://cors-proxy.你的用户名.workers.dev</code>）</li>
+        <li>粘贴到上方「CORS 代理」输入框中</li>
+      </ol>
+      <div style="position:relative;margin-bottom:12px">
+        <button class="btn btn-sm" onclick="copyCorsWorker()" style="position:absolute;top:8px;right:8px;z-index:1;font-size:.75rem">📋 复制代码</button>
+        <pre id="corsWorkerCode" style="background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:.78rem;color:var(--text);max-height:300px;overflow-y:auto">export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    const target = url.searchParams.get('url');
+    if (!target) return new Response('Missing ?url= param', { status: 400 });
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': '*',
+    };
+    if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+    const resp = await fetch(target, {
+      method: request.method,
+      headers: request.headers,
+      body: request.method !== 'GET' ? request.body : undefined,
+    });
+    const newResp = new Response(resp.body, resp);
+    Object.entries(corsHeaders).forEach(([k, v]) => newResp.headers.set(k, v));
+    return newResp;
+  }
+};</pre>
+      </div>
+      <p style="color:var(--text3);font-size:.78rem">⚠️ 免费版限制：每天 10 万次请求，10ms CPU 时间。个人使用完全够用。</p>
+    </div>
   </div>
 </div>
 
@@ -588,6 +656,22 @@ function updateWelcomeInfo(){
 // ═══════════════════════════════════════════════════════
 //  Settings
 // ═══════════════════════════════════════════════════════
+function quickProvider(el){
+  const url=el.dataset.url,models=el.dataset.models;
+  document.getElementById('cfgBaseUrl').value=url;
+  if(models&&!document.getElementById('cfgModels').value)document.getElementById('cfgModels').value=models;
+  document.querySelectorAll('#providerCards .tool-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  toast('已填入 '+el.querySelector('.tool-name').textContent+' 配置','success');
+}
+function showCorsGuide(){
+  const modal=document.getElementById('corsGuideModal');
+  if(modal)modal.classList.add('show');
+}
+function copyCorsWorker(){
+  const code=document.getElementById('corsWorkerCode').textContent;
+  navigator.clipboard.writeText(code).then(()=>toast('代码已复制','success')).catch(()=>toast('复制失败','error'));
+}
 function loadConfigUI(){
   const cfg=getConfig();selectedSource=cfg.source;selectedCLI=cfg.cliTool;
   document.getElementById('cfgBaseUrl').value=cfg.baseUrl;
@@ -653,7 +737,7 @@ async function testConnection(){
     }
   }catch(e){
     if(e.message==='Failed to fetch'){
-      toast('❌ CORS 拦截：API 不支持浏览器直连，请填入 CORS 代理地址','error');
+      toast('❌ CORS 拦截：请填入 CORS 代理地址（见设定底部「部署免费 CORS 代理」）','error');
     }else{
       toast('❌ 连接失败: '+e.message,'error');
     }
@@ -1180,7 +1264,7 @@ async function sendMessage(text){
       let errMsg=e.message;
       // CORS 错误友好提示
       if(e.message==='Failed to fetch'||e.message.includes('NetworkError')){
-        errMsg='请求被浏览器 CORS 策略拦截。解决方案：\n\n1. 在设定中填入 CORS 代理地址\n2. 或使用支持 CORS 的 API 服务商\n3. 或部署自己的 CORS 代理（如 Cloudflare Worker）';
+        errMsg='CORS 拦截：浏览器无法直连此 API。\n\n请在「设定」中填入 CORS 代理地址（免费部署指南在设定页面底部）。\n\n或切换到支持 CORS 的服务商（如 DeepSeek、SiliconFlow）';
       }else if(e.message.includes('401')||e.message.includes('Unauthorized')){
         errMsg='API Key 无效或已过期，请在设定中检查';
       }else if(e.message.includes('429')){
